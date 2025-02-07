@@ -33,6 +33,15 @@ public:
     //获取连接
     MYSQL * getConnection();
 
+    //设置提交模式
+    void setAutoCommit(int mode);
+
+    //回滚事务
+    void rollBack();
+
+  
+
+
 private:
 
     MYSQL *_conn;

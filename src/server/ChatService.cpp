@@ -18,6 +18,9 @@ ChatService::ChatService(){
     _msgHandlerMap.insert({EnMsgType::LOGIN_MSG, bind(&ChatService::login, this, placeholders::_1, placeholders::_2, placeholders::_3)});
     _msgHandlerMap.insert({EnMsgType::REG_MSG, bind(&ChatService::reg, this, placeholders::_1, placeholders::_2, placeholders::_3)});
     _msgHandlerMap.insert({EnMsgType::ONE_CHAT_MSG, bind(&ChatService::oneChat, this, placeholders::_1, placeholders::_2, placeholders::_3)});
+    _msgHandlerMap.insert({EnMsgType::ADD_FRIEND_MSG, bind(&ChatService::addFriend, this, placeholders::_1, placeholders::_2, placeholders::_3)});
+    _msgHandlerMap.insert({EnMsgType::CREATE_GROUP_MSG, bind(&ChatService::createGroup, this, placeholders::_1, placeholders::_2, placeholders::_3)});
+    _msgHandlerMap.insert({EnMsgType::JOIN_GROUP_MSG, bind(&ChatService::joinGroup, this, placeholders::_1, placeholders::_2, placeholders::_3)});
 }
 
 //登录业务
@@ -40,11 +43,10 @@ void ChatService::login(const TcpConnectionPtr& conn,
         if(user.getState()=="online"){
             //已经登陆了
             respond["errno"] = 1;
-            respond["errmsg"] = "不允许重复登录";
-            LOG_INFO<<"已经登录了";
+            respond["ackmsg"] = "不允许重复登录";
         }else{
             //登录成功
-            LOG_INFO<<"登录成功";
+            respond["ackmsg"] = "登陆成功";
             //记录用户连接信息。
             {
                 lock_guard<mutex> lock(connMutex);
@@ -63,27 +65,41 @@ void ChatService::login(const TcpConnectionPtr& conn,
                 //把离线消息转发给用户
                 respond["offlinemsg"]=msgs;
             }
-            
             //把好友列表给用户发过去
             vector<User> friends = friendModel.query(id);
             if(!friends.empty()){
-                vector<string> vec;
+                vector<json> vec;
                 for(User &u: friends){
-                    json js;
-                    js["id"] = u.getID();
-                    js["name"] = u.getName();
-                    js["state"] = u.getState();
-                    vec.push_back(js.dump());
+                    json subjs;
+                    subjs["id"] = u.getID();
+                    subjs["name"] = u.getName();
+                    subjs["state"] = u.getState();
+                    vec.push_back(subjs);
                 }
                 respond["friends"] = vec;
+            }
+            
+            //查询它所在的群
+            vector<Group> groups = groupModel.queryGroup(id);
+            if(!groups.empty()){
+                vector<json> sec;
+                json subjs;
+                for_each(groups.begin(), groups.end(), [&](Group &g){
+                    subjs["id"]=g.getId();
+                    subjs["groupname"]=g.getGroupName();
+                    subjs["groupdesc"]=g.getGroupDesc();
+                    sec.push_back(subjs);
+                });
+                respond["groups"] = sec;
             }
         }  
     }else{
         //登录失败，用户名或者密码错误
         respond["errno"] = 1;
-        respond["errmsg"] = "用户名或者密码错误";
+        respond["ackmsg"] = "用户名或者密码错误";
         LOG_INFO<<"登录失败";
     }
+
     conn->send(respond.dump());
 
 }
@@ -136,7 +152,6 @@ MsgHandler ChatService::getHandler(int msgid){
 void ChatService::clientCloseException(const TcpConnectionPtr& conn){
     //客户端关闭时需要做的处理
     User user;
-
     //先从map中删除记录的连接
     {
         lock_guard<mutex> lock(connMutex);
@@ -166,9 +181,12 @@ void ChatService::oneChat(const TcpConnectionPtr& conn,
                         Timestamp t)
 {
     LOG_INFO<<"执行到了service::onechat";
+    json respond;
+    respond["msgid"] = EnMsgType::ONE_CHAT_MSG_ACK;
     //先把对方的id给取出来
     int toid = js["toid"].get<int>();
 
+    
     //根据对方是否在线来进行业务的处理
     {
         lock_guard<mutex> lock(connMutex);
@@ -176,13 +194,26 @@ void ChatService::oneChat(const TcpConnectionPtr& conn,
         if(it != userConnMap.end()){
             //对方在线。给他发送消息
             it->second->send(js.dump());
+            respond["errno"] = 0;
+            respond["ackmsg"] = "对方在线,消息已经送达";
+            conn->send(respond.dump());
             return;   
         }
     }
-    //对方不在线，存储离线消息
-    offlineMsgModel.insert(toid, js.dump());
     
+    //对方不在线，存储离线消息
+    if(offlineMsgModel.insert(toid, js.dump())){
+        respond["errno"] = 0;
+        //离线消息存储成功
+        respond["ackmsg"] = "对方不在线，发送为离线消息";
+        conn->send(respond.dump());
+        return;
+    }
 
+    //离线消息存储失败
+    respond["errno"] = 1;
+    respond["ackmsg"] = "离线消息存储失败";
+    conn->send(respond.dump());
 }
 
 //服务器关闭后重置所有用户状态的函数
@@ -191,17 +222,83 @@ void ChatService::reset(){
 }
 
 //添加好友业务
-bool ChatService::addFriend(const TcpConnectionPtr& conn,
+void ChatService::addFriend(const TcpConnectionPtr& conn,
                             json &js,
                             Timestamp tp)
 {
+    json respond;
+    respond["msgid"] = EnMsgType::ADD_FRIEND_MSG_ACK;
     // 先从js对象中获取id
     int userid = js["id"].get<int>();
     int friendid = js["friend"].get<int>();
-
     //调用model层添加好友。
+    if(friendModel.insert(userid, friendid)){
+        respond["errno"] = 0;
+        respond["ackmsg"] = "添加好友成功";
+    }else{
+        respond["errno"] = 1;
+        respond["ackmsg"] = "添加好友失败";
+    }
+    //发送响应
+    conn->send(respond.dump());
+    return ;
+}
+
+//创建群组业务
+void ChatService::createGroup(const TcpConnectionPtr& conn,
+                        json &js,
+                        Timestamp tp)
+{
+    //用户信息
+    int userid = js["id"].get<int>();
+    //要创建的群信息
+    string groupdesc = js["groupdesc"];
+    string groupname = js["groupname"];
+
+    //定义响应json
+    json respond;
+    respond["msgid"] = EnMsgType::CREATE_GROUP_MSG_ACK;
+    //开始创建群
+    Group group = groupModel.creatGroup(groupname, groupdesc, userid);
+    if(group.getId() == -1){
+        respond["errno"] = 1;
+        respond["ackmsg"]="群创建失败";
+    }else{
+        respond["errno"] = 0;
+        respond["ackmsg"] = "群创建成功";
+ 
+        json subjs;
+        subjs["id"] = group.getId();
+        subjs["groupname"] = group.getGroupName();
+        subjs["groupdesc"] = group.getGroupDesc();
+        respond["group"] = subjs;
+    }
     
-    return friendModel.insert(userid, friendid);
+    //以json字符串的形式响应
+    conn->send(respond.dump());
+    return ;
+}
 
+    //加入群组业务
+void ChatService::joinGroup(const TcpConnectionPtr& conn,
+    json &js,
+    Timestamp tp)
+{
+    //用户信息以及要加入的群信息
+    int userid = js["id"].get<int>();
+    int groupid = js["groupid"].get<int>();
+    //定义响应json
+    json respond;
+    respond["msgid"] = EnMsgType::JOIN_GROUP_MSG_ACK;
 
+    if(groupModel.joinGroup(userid, groupid)){
+        respond["errno"] = 0;
+        respond["ackmsg"] = "加入群组成功";
+    }else{
+        respond["errno"] = 1;
+        respond["ackmsg"] = "加入群组失败";
+    }
+    //以json字符串的形式响应
+    conn->send(respond.dump());
+    return ;
 }

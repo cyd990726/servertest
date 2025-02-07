@@ -44,3 +44,12 @@ MYSQL_RES* MySql::query(const std::string& sql) {
 MYSQL * MySql::getConnection(){
     return _conn;
 }
+
+//设置自动提交/手动提交
+void MySql::setAutoCommit(int mode){
+    mysql_autocommit(_conn, mode); 
+}
+
+void MySql::rollBack(){
+    mysql_rollback(_conn);
+}

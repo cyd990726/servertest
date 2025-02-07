@@ -33,15 +33,13 @@ void ChatServer::onConnectionCallback(const TcpConnectionPtr& conn)
         //链接相关的业务，没有的话就不用写
         LOG_INFO<<conn->peerAddress().toIpPort()<<"已连接";
     }else{
-        //调用业务层
+        //调用业务层,清除客户端关闭后的东西
         ChatService::getInstance()->clientCloseException(conn);
-
+        LOG_INFO<<conn->peerAddress().toIpPort()<<"断开连接";
         //如果断开了就释放连接
         conn->shutdown();
         
     }
-    
-
 }
 //收到消息的时候会调用
 void ChatServer::onMessageCallback(const TcpConnectionPtr& conn,
@@ -52,14 +50,26 @@ void ChatServer::onMessageCallback(const TcpConnectionPtr& conn,
     string msg = buf->retrieveAllAsString();
     LOG_INFO<<"msg:"<<msg;
     //利用json库将字符串反序列化成一个json对象。
-    json js = json::parse(msg);
+    
     
     //通过js里面读出来的msgid调用相应的服务，不要指名道姓的调用业务模块的方法，实现网络层和业务层的解耦。
 
     //通过msgid得到对应的方法
-    auto msgHandler = ChatService::getInstance()->getHandler(js["msgid"].get<int>());
-    //再调用这个方法。
-    msgHandler(conn, js, tp);
+    try
+    {
+        json js = json::parse(msg);
+        auto msgHandler = ChatService::getInstance()->getHandler(js["msgid"].get<int>());
+        //再调用这个方法。
+        msgHandler(conn, js, tp);
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        //回复过去
+        conn->send(e.what());
+    }
+    
+    
 
 }
 void ChatServer::start()

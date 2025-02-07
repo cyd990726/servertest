@@ -10,6 +10,9 @@
 #include <mutex>
 #include <offlinemessagemodel.hpp>
 #include "FriendModel.hpp"
+#include "Group.hpp"
+#include "GroupModel.hpp"
+#include "GroupUser.hpp"
 
 using nlohmann::json;
 
@@ -35,6 +38,7 @@ private:
     UserModel usermodel;
     OfflineMsgModel offlineMsgModel;
     FriendModel friendModel;
+    GroupModel groupModel;
 
     //记录用户连接信息
     //注意：这个因为网络层会创建多个线程调用业务层的逻辑代码，userConnMap的使用需要考虑线程安全问题
@@ -70,7 +74,17 @@ public:
     void reset();
 
     //添加好友业务
-    bool addFriend(const TcpConnectionPtr& conn,
+    void addFriend(const TcpConnectionPtr& conn,
+                            json &js,
+                            Timestamp tp);
+    
+    //创建群组业务
+    void createGroup(const TcpConnectionPtr& conn,
+                            json &js,
+                            Timestamp tp);
+    
+    //加入群组业务
+    void joinGroup(const TcpConnectionPtr& conn,
                             json &js,
                             Timestamp tp);
 
