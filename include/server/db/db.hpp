@@ -8,7 +8,7 @@ using namespace muduo;
 using namespace std;
 
 // 数据库配置信息
-static const std::string server = "chenyandon.xyz";
+static const std::string server = "172.22.191.1";
 static const std::string user = "cyd";
 static const std::string password = "Cyd19990726";
 static const std::string dbname = "chat";

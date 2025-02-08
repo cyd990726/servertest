@@ -26,7 +26,7 @@ int main(){
     sigprocmask(SIG_UNBLOCK, &mask, NULL);
 
     
-
+    //创建事件循环
     EventLoop loop;
     InetAddress addr("127.0.0.1", 6000);
     ChatServer server(&loop, addr, "陈炎东的服务器");
