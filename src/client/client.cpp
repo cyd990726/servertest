@@ -18,8 +18,8 @@ using json = nlohmann::json;
 #include <semaphore.h>
 #include <atomic>
 
-#include "group.hpp"
-#include "user.hpp"
+#include "Group.hpp"
+#include "User.hpp"
 #include "public.hpp"
 
 // 记录当前系统登录的用户信息
@@ -335,13 +335,13 @@ void readTaskHandler(int clientfd)
 void showCurrentUserData()
 {
     cout << "======================login user======================" << endl;
-    cout << "current login user => id:" << g_currentUser.getId() << " name:" << g_currentUser.getName() << endl;
+    cout << "current login user => id:" << g_currentUser.getID() << " name:" << g_currentUser.getName() << endl;
     cout << "----------------------friend list---------------------" << endl;
     if (!g_currentUserFriendList.empty())
     {
         for (User &user : g_currentUserFriendList)
         {
-            cout << user.getId() << " " << user.getName() << " " << user.getState() << endl;
+            cout << user.getID() << " " << user.getName() << " " << user.getState() << endl;
         }
     }
     cout << "----------------------group list----------------------" << endl;
@@ -349,11 +349,11 @@ void showCurrentUserData()
     {
         for (Group &group : g_currentUserGroupList)
         {
-            cout << group.getId() << " " << group.getName() << " " << group.getDesc() << endl;
+            cout << group.getID() << " " << group.getName() << " " << group.getDesc() << endl;
 
             for (GroupUser &user : group.getUsers())
             {
-                cout << " " << user.getId() << " " << user.getName() << " " << user.getState()
+                cout << " " << user.getID() << " " << user.getName() << " " << user.getState()
                      << " " << user.getRole() << endl;
             }
         }
@@ -443,7 +443,7 @@ void addfriend(int clientfd, string str)
     int friendid = atoi(str.c_str());
     json js;
     js["msgid"] = ADD_FRIEND_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = g_currentUser.getID();
     js["friendid"] = friendid;
     string buffer = js.dump();
 
@@ -468,7 +468,7 @@ void chat(int clientfd, string str)
 
     json js;
     js["msgid"] = ONE_CHAT_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = g_currentUser.getID();
     js["name"] = g_currentUser.getName();
     js["toid"] = friendid;
     js["msg"] = message;
@@ -496,7 +496,7 @@ void creategroup(int clientfd, string str)
 
     json js;
     js["msgid"] = CREATE_GROUP_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = g_currentUser.getID();
     js["groupname"] = groupname;
     js["groupdesc"] = groupdesc;
     string buffer = js.dump();
@@ -513,7 +513,7 @@ void addgroup(int clientfd, string str)
     int groupid = atoi(str.c_str());
     json js;
     js["msgid"] = ADD_GROUP_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = g_currentUser.getID();
     js["groupid"] = groupid;
     string buffer = js.dump();
 
@@ -538,7 +538,7 @@ void groupchat(int clientfd, string str)
 
     json js;
     js["msgid"] = GROUP_CHAT_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = g_currentUser.getID();
     js["name"] = g_currentUser.getName();
     js["groupid"] = groupid;
     js["msg"] = message;
@@ -556,7 +556,7 @@ void loginout(int clientfd, string)
 {
     json js;
     js["msgid"] = LOGOUT_MSG;
-    js["id"] = g_currentUser.getId();
+    js["id"] = g_currentUser.getID();
     string buffer = js.dump();
 
     int len = send(clientfd, buffer.c_str(), strlen(buffer.c_str()) + 1, 0);
